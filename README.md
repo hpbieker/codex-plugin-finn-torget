@@ -1,6 +1,6 @@
 # FINN Torget for Codex
 
-Search FINN Torget, manage your listings, and contact sellers from Codex. This plugin runs locally on your Mac and uses your existing FINN login in Safari for account features.
+Search FINN Torget, manage your listings, and contact sellers from Codex. This plugin runs locally and uses your existing FINN login in Safari for account features.
 
 This is an unofficial integration and is not affiliated with FINN.
 
@@ -15,13 +15,17 @@ This is an unofficial integration and is not affiliated with FINN.
 
 ## Requirements
 
-- macOS with Codex and plugin support.
+- Codex with plugin support.
 - [uv](https://docs.astral.sh/uv/) available in the `PATH` used by Codex.
 - Python available through uv. The current version has been tested with Python 3.13.
 - A FINN account signed in through Safari for private listings, messages, seller profiles, and other account features.
 - **CurlSafariServer** installed and running for Safari authentication. This is a separate dependency and is not included in this repository. It must be able to read Safari cookies; macOS may require Full Disk Access for the server app.
 
-Public listing searches do not require a FINN login. Account features require the local Safari cookie service, even if you are signed in to FINN in another browser.
+### Platform support
+
+macOS is the tested platform. Authenticated features currently require macOS because they rely on Safari and CurlSafariServer. Signing in through another browser does not provide authentication to this plugin.
+
+Public listing searches do not require a FINN login or the Safari cookie service. They may work on other operating systems, but Linux and Windows have not been tested. The bundled launcher uses a POSIX shell (`sh`); Windows would also need a compatible shell or an adapted launcher. Full account support on other platforms requires an alternative authentication method.
 
 ## Installation
 
