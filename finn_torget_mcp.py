@@ -1414,6 +1414,82 @@ def send_message(
     return _send_text(base, login_id, body, conversation_id=conversation_id)
 
 
+def _seller_json(url: str) -> dict:
+    try:
+        status, final_url, body = _request(url, authenticated=True, timeout=60)
+    except SystemExit:
+        raise RuntimeError("seller_session_unavailable: Could not import Safari login") from None
+    except (URLError, TimeoutError, OSError):
+        raise RuntimeError("seller_network_error: Could not fetch seller information") from None
+    if status == 401 or (urlparse(final_url).hostname in {
+            "login.finn.no", "login.vend.no", "login.schibsted.com", "login.spid.no"}) or (
+            urlparse(final_url).path.startswith(("/auth", "/login"))):
+        raise RuntimeError("auth_required: Sign in to FINN in Safari and retry")
+    if status == 403:
+        raise RuntimeError("seller_access_denied: FINN denied access to seller information")
+    if status in (404, 410):
+        raise RuntimeError("seller_unavailable: Listing or seller information is unavailable")
+    if not 200 <= status < 300:
+        raise RuntimeError(f"seller_http_error: FINN returned HTTP {status}")
+    if urlparse(final_url).netloc != "www.finn.no" or urlparse(final_url).scheme != "https":
+        raise RuntimeError("seller_response_invalid: Unexpected FINN response location")
+    try:
+        data = json.loads(body)
+    except (ValueError, UnicodeError):
+        raise RuntimeError("seller_response_invalid: FINN did not return valid JSON") from None
+    if not isinstance(data, dict):
+        raise RuntimeError("seller_response_invalid: Expected a JSON object")
+    return data
+
+
+def _seller_integer(value: object) -> int | None:
+    if type(value) is int and value >= 0:
+        return value
+    return None
+
+
+@mcp.tool()
+def get_listing_seller(
+    listing_id: Annotated[str, "FINN Torget listing ID whose seller profile to read."],
+) -> dict:
+    """Read a Torget seller's visible profile, verification and ratings. Never sends or creates a conversation."""
+    if not isinstance(listing_id, str) or not re.fullmatch(r"[1-9][0-9]*", listing_id):
+        raise ValueError("A numeric FINN listing ID is required")
+    base, _ = _message_context()
+    ad_data = _seller_json(f"{base}/api/listing?ids=ad{listing_id}")
+    ads = ad_data.get("ads")
+    if ads == []:
+        raise RuntimeError("seller_unavailable: Listing is unavailable")
+    if not isinstance(ads, list) or len(ads) != 1 or not isinstance(ads[0], dict):
+        raise RuntimeError("seller_response_invalid: Expected exactly one listing")
+    if str(ads[0].get("vertical", "")).lower() != "recommerce":
+        raise RuntimeError("seller_not_torget: Expected a FINN Torget listing")
+    contact = _seller_json(f"{base}/api/contact/configuration/{listing_id}")
+    owner = contact.get("owner")
+    owner_id = str(owner) if type(owner) in (str, int) else ""
+    profile_url = None
+    if re.fullmatch(r"[1-9][0-9]*", owner_id) and contact.get("anonymous") is not True:
+        profile_url = f"https://www.finn.no/profile?userId={owner_id}"
+    score = contact.get("ownerRatingScore")
+    # Decimal commas are FINN's Norwegian display format. Never coerce booleans or NaN.
+    rating = None
+    if type(score) in (str, int, float) and re.fullmatch(r"[0-9]+(?:[.,][0-9]+)?", str(score)):
+        parsed_score = float(str(score).replace(",", "."))
+        if 0 <= parsed_score <= 10:
+            rating = parsed_score
+    name = contact.get("ownerName")
+    verified = contact.get("ownerEidVerified")
+    return {"listing_id": listing_id, "seller": {
+        "name": name if isinstance(name, str) and name.strip() else None,
+        "profile_url": profile_url,
+        "type": {"PRIVATE": "private"}.get(contact.get("segment")) if isinstance(contact.get("segment"), str) else None,
+        "member_since": _seller_integer(contact.get("ownerMemberSince")),
+        "identity_verified": verified if type(verified) is bool else None,
+        "rating_score": rating,
+        "rating_count": _seller_integer(contact.get("ownerRatingCount")),
+    }}
+
+
 @mcp.tool()
 def send_listing_message(
     listing_id: Annotated[str, "FINN Torget listing ID to contact."],

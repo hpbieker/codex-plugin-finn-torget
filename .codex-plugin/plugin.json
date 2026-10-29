@@ -1,6 +1,6 @@
 {
   "name": "codex-plugin-finn-torget",
-  "version": "0.1.10",
+  "version": "0.1.11",
   "description": "Search and manage FINN Torget listings, images, saved searches, and conversations through MCP.",
   "author": {
     "name": "Hans Petter Bieker"

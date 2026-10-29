@@ -95,3 +95,21 @@ sending. `outcome=unconfirmed` may mean the message was sent: inspect the return
 conversation and client message IDs before considering another send. Never retry
 an uncertain write automatically. `write_request_accepted` is separate from
 readback verification. No raw authenticated responses or credentials are returned.
+
+
+## Seller profile
+
+`get_listing_seller(listing_id)` reads the seller's visible FINN profile without
+sending a message or creating a conversation. It reuses Safari login, checks
+that `/messages/api/listing?ids=ad{listing_id}` identifies a Torget listing, and
+reads `/messages/api/contact/configuration/{listing_id}`.
+
+The result includes `listing_id` and `seller` with `name` (`ownerName`),
+`profile_url` (built from `owner`), `type` (`segment`: PRIVATE -> private; other values -> null), `member_since`
+(`ownerMemberSince`), `identity_verified` (`ownerEidVerified`), `rating_score`
+(`ownerRatingScore`, decimal comma converted to a number), and `rating_count`
+(`ownerRatingCount`). Missing or malformed fields return null, including missing
+verification; false remains false and zero ratings remain zero. Anonymous
+profiles do not expose an owner profile URL. Ratings are FINN's reported values,
+not an independent assessment. Authentication, access, unavailable-listing and
+invalid-response errors are distinct; no raw authenticated responses are returned.

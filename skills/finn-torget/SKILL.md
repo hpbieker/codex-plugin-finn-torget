@@ -5,7 +5,7 @@ description: Search and manage FINN Torget through native FINN Torget MCP tools.
 
 # FINN Torget
 
-Use the typed MCP tools: `search_listings`, `search_categories`, `list_categories`, `list_listings`, `get_listing`, `get_listings_many`, `search_listings_fulltext`, `get_listing_options`, `update_listing`, `download_image`, `move_image`, `remove_image`, `rotate_image`, `create_listing`, `delete_listing`, `publish_listing`, `saved_searches`, `create_saved_search`, `update_saved_search`, `list_conversations`, `get_conversation`, `search_messages`, `send_message`, and `send_listing_message`. They return structured data. Do not call Python modules as command-line programs.
+Use the typed MCP tools: `search_listings`, `search_categories`, `list_categories`, `list_listings`, `get_listing`, `get_listing_seller`, `get_listings_many`, `search_listings_fulltext`, `get_listing_options`, `update_listing`, `download_image`, `move_image`, `remove_image`, `rotate_image`, `create_listing`, `delete_listing`, `publish_listing`, `saved_searches`, `create_saved_search`, `update_saved_search`, `list_conversations`, `get_conversation`, `search_messages`, `send_message`, and `send_listing_message`. They return structured data. Do not call Python modules as command-line programs.
 
 Use `list_conversations` to read FINN inbox threads, `get_conversation` to read a thread page, and `search_messages` to search recent message pages. Search is bounded and reports whether it reached the end of the available conversation list. These are read-only tools. Do not call `send_message` unless the user separately asks for a specific message to be sent.
 
@@ -151,3 +151,21 @@ sending. `outcome=unconfirmed` may mean the message was sent: inspect the return
 conversation and client message IDs before considering another send. Never retry
 an uncertain write automatically. `write_request_accepted` is separate from
 readback verification. No raw authenticated responses or credentials are returned.
+
+
+## Seller profile
+
+`get_listing_seller(listing_id)` reads the seller's visible FINN profile without
+sending a message or creating a conversation. It reuses Safari login, checks
+that `/messages/api/listing?ids=ad{listing_id}` identifies a Torget listing, and
+reads `/messages/api/contact/configuration/{listing_id}`.
+
+The result includes `listing_id` and `seller` with `name` (`ownerName`),
+`profile_url` (built from `owner`), `type` (`segment`: PRIVATE -> private; other values -> null), `member_since`
+(`ownerMemberSince`), `identity_verified` (`ownerEidVerified`), `rating_score`
+(`ownerRatingScore`, decimal comma converted to a number), and `rating_count`
+(`ownerRatingCount`). Missing or malformed fields return null, including missing
+verification; false remains false and zero ratings remain zero. Anonymous
+profiles do not expose an owner profile URL. Ratings are FINN's reported values,
+not an independent assessment. Authentication, access, unavailable-listing and
+invalid-response errors are distinct; no raw authenticated responses are returned.
