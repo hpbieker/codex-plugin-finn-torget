@@ -75,7 +75,7 @@ costly local scan: each selected ad needs a separate detail retrieval, up to fou
 concurrently. `scan_limit` caps retrievals at 1–500; `limit` caps returned matches
 at 1–100 without reducing scan cost. No title-only prefilter is applied.
 
-Syntax matches OmniFocus: whitespace means AND, uppercase `AND`/`OR` are
+Search syntax: whitespace means AND, uppercase `AND`/`OR` are
 operators, quotes match phrases, leading `-` excludes, and parentheses group.
 Precedence is exclusion, AND, OR. Lowercase and/or are literal words. Matching
 uses case-insensitive substrings; no stemming, regex, or wildcard expansion.

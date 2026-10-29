@@ -524,7 +524,7 @@ def get_listing(
 
 @mcp.tool()
 def search_listings_fulltext(
-    query: Annotated[str, 'Search own titles and descriptions using OmniFocus syntax: spaces/AND, OR, "phrases", -exclusion, parentheses. Case-insensitive substrings.'],
+    query: Annotated[str, 'Search own titles and descriptions using search syntax: spaces/AND, OR, "phrases", -exclusion, parentheses. Case-insensitive substrings.'],
     scan_limit: Annotated[int, "Maximum own ads to retrieve (1–500). Costly: separate detail retrieval per ad, up to four concurrently."] = 100,
     limit: Annotated[int, "Maximum matching ads to return (1–100). Does not reduce scan cost."] = 50,
     status_facet: Annotated[list[Literal["ACTIVE", "DRAFT", "DISPOSED"]], Field(min_length=1, max_length=3, description="Owner statuses to scan (OR). Default: [ACTIVE]. ACTIVE = active ads; DRAFT = started/unfinished ads; DISPOSED = finished/sold ads. ALL is unsupported here, but remains supported by list_listings.")] = ["ACTIVE"],
