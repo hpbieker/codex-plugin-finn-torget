@@ -5,10 +5,12 @@ from __future__ import annotations
 
 import argparse
 import base64
+from copy import deepcopy
 from datetime import datetime
 import html
 import json
 import mimetypes
+import math
 import os
 import re
 import shutil
@@ -38,14 +40,6 @@ SAVED_SEARCH_CREATE_URL = (
 )
 DEFAULT_SEARCH_KEY = "SEARCH_ID_BAP_COMMON"
 DEFAULT_CATEGORY_QUERY = ""
-DEFAULT_ADDRESS = {
-    "postalcode": "0776",
-    "postalname": "Oslo",
-    "country": "NO",
-    "latitude": "59.95310294117101",
-    "longitude": "10.69060425516443",
-    "accuracy": 5,
-}
 TRADE_TYPE = {
     "sell": "1",
     "sale": "1",
@@ -926,23 +920,57 @@ def _description_for_create(args: argparse.Namespace) -> str:
     return description
 
 
-def _populate_create_data(data: dict, args: argparse.Namespace) -> None:
+def _validated_draft_address(data: dict) -> dict:
+    """Validate and snapshot the location supplied by FINN without inventing values."""
+    address = data.get("address")
+    valid = isinstance(address, dict) and all(
+        isinstance(address.get(key), str) and address[key].strip()
+        for key in ("postalcode", "postalname", "country")
+    )
+    if valid:
+        for key, lower, upper in (("latitude", -90, 90), ("longitude", -180, 180)):
+            value = address.get(key)
+            try:
+                coordinate = float(value) if type(value) in (str, int, float) else float("nan")
+            except (ValueError, OverflowError):
+                coordinate = float("nan")
+            if not math.isfinite(coordinate) or not lower <= coordinate <= upper:
+                valid = False
+                break
+    if not valid:
+        raise ValueError(
+            "Draft has no valid listing location. Set its location in FINN, then resume "
+            "with create_listing(draft_id=...). No listing fields or photos were saved."
+        )
+    return deepcopy(address)
+
+
+def _listing_address_matches(actual: object, expected: dict) -> bool:
+    """Allow numeric coordinate formatting changes, but not a changed location."""
+    if not isinstance(actual, dict):
+        return False
+    try:
+        _validated_draft_address({"address": actual})
+    except ValueError:
+        return False
+    return all(
+        float(actual[key]) == float(value) if key in ("latitude", "longitude")
+        else actual.get(key) == value
+        for key, value in expected.items()
+    )
+
+
+def _populate_create_data(data: dict, args: argparse.Namespace) -> dict:
+    expected_address = _validated_draft_address(data)
     data["title"] = args.title
     data["description"] = _description_for_create(args)
     data["trade_type"] = args.trade_type
     data["price"] = {"price_amount": args.price}
     data["category"] = args.category
     _apply_select_fields(data, args, args.select_html_path)
-    data["address"] = {
-        "postalcode": args.postalcode,
-        "postalname": args.postalname,
-        "country": args.country,
-        "latitude": str(args.latitude),
-        "longitude": str(args.longitude),
-        "accuracy": args.accuracy,
-    }
     data.setdefault("image", [])
     data["edited_by_system_tmp"] = "recommerce-item-insertion"
+    return expected_address
 
 
 def _new_recommerce_draft(args: argparse.Namespace) -> str:

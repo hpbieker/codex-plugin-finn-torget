@@ -19,7 +19,7 @@ This is an unofficial integration and is not affiliated with FINN.
 - [uv](https://docs.astral.sh/uv/) available in the `PATH` used by Codex.
 - Python available through uv. The current version has been tested with Python 3.13.
 - A FINN account signed in through Safari for private listings, messages, seller profiles, and other account features.
-- **CurlSafariServer** installed and running for Safari authentication. This is a separate dependency and is not included in this repository. It must be able to read Safari cookies; macOS may require Full Disk Access for the server app.
+- **CurlSafariServer**, provided by [curl-safari](https://github.com/hpbieker/codex-plugin-curl-safari), installed and running for Safari authentication. Follow the installation instructions in that repository; this dependency is not bundled with the FINN Torget plugin. It must be able to read Safari cookies; macOS may require Full Disk Access for the server app.
 
 ### Platform support
 
@@ -72,6 +72,7 @@ Requests go to FINN using your account where authentication is required. Informa
 - Search results and message searches can be limited or paginated. A partial search is not a complete account history.
 - Seller information can be missing. Ratings and identity verification are reported as supplied by FINN.
 - Changes and messages are checked by reading data back where supported. An unconfirmed outcome can still mean the action succeeded; check the current state before trying again.
+- New listings keep the location supplied by FINN in the draft. If it is missing or invalid, set the location in FINN and resume with the returned draft ID. The plugin does not assign a default location.
 - Deleting a listing is permanent.
 
 ## Development

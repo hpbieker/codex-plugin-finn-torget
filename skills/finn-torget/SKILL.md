@@ -72,6 +72,8 @@ Use `create_listing`, `update_listing`, or `update_listings_many` for the reques
 
 Condition is optional. Map the user's description to a supported label, or omit it when unknown. Do not infer a condition grade from functionality or assume that rental equipment has a particular wear level. Use labels returned by `get_listing_options`, such as `Pent brukt`, rather than unsupported labels such as `Brukt`.
 
+Creation preserves the address supplied by FINN in the draft and verifies it during readback. It does not use a fixed default location. If the draft location is missing or invalid, have the user set it in FINN and resume with the same draft ID; do not invent a location or create a replacement draft.
+
 After failed creation, inspect any returned listing ID. Reuse a confirmed draft with `create_listing(draft_id=...)` rather than creating another listing to correct it.
 
 Report `content_verified`, `submission_confirmed`, and `publication_status` separately. A submission receipt confirms receipt by FINN, not public visibility. Use owner state by listing ID to check publication; an editable form can still say `edit` or `draft` after submission. `list_listings` normalizes status filters to uppercase.

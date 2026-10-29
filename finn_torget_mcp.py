@@ -974,7 +974,12 @@ def create_listing(
     publish_free_standard: Annotated[StrictBool, Field(description='Publish using only free Standard after creating and verifying the ad.')] = False,
     draft_id: Annotated[ListingId | None, Field(description='Resume this existing draft instead of creating a new ad. Inspect it first with get_listing/get_listing_options.')] = None,
 ) -> RootModel[ListingCreation]:
-    """Create a FINN Torget listing, verify it, and optionally publish free Standard."""
+    """Create a FINN Torget listing and optionally publish free Standard.
+
+    Preserve the location FINN supplies in the draft. If it is missing or invalid,
+    set the location in FINN and resume using the returned draft ID; no fields or
+    photos are saved until the draft has a valid location.
+    """
     _validate_condition(condition)
     if draft_id is not None and not draft_id.isdigit():
         raise ValueError("draft_id must be a numeric FINN ad ID")
@@ -997,10 +1002,7 @@ def create_listing(
                          "search_categories/list_categories (subcategory or product category); no FINN draft was created")
     args = argparse.Namespace(title=title, description=description, description_file=None,
         price=price, category=category_id, condition=condition, shoe_size=shoe_size,
-        trade_type="SELL", postalcode=api.DEFAULT_ADDRESS["postalcode"],
-        postalname=api.DEFAULT_ADDRESS["postalname"], country="NO",
-        latitude=api.DEFAULT_ADDRESS["latitude"], longitude=api.DEFAULT_ADDRESS["longitude"],
-        accuracy=api.DEFAULT_ADDRESS["accuracy"], create_response=None)
+        trade_type="SELL", create_response=None)
     captured = io.StringIO()
     listing_id = draft_id
     stage = "loading existing draft" if draft_id else "creating draft"
@@ -1026,9 +1028,9 @@ def create_listing(
                     raise ValueError("FINN owner status did not confirm this ID is still a draft; "
                                      "no fields, images, or publication were changed")
             listing_id = fetched_id
-            stage = "validating draft fields"
+            stage = "validating draft location and fields"
             args.select_html_path = html_path
-            api._populate_create_data(data, args)
+            expected_address = api._populate_create_data(data, args)
             for image_path in image_paths:
                 stage = "uploading images"
                 image = api._upload_item_image(listing_id, image_path)
@@ -1043,6 +1045,7 @@ def create_listing(
             verified = (api._item_title(saved) == title and saved.get("description") == description
                 and str(api._price_amount(saved)) == str(price)
                 and str(saved.get("category")) == str(category_id)
+                and api._listing_address_matches(saved.get("address"), expected_address)
                 and all(str(saved.get(key)) == str(value) for key, value in getattr(args, "expected_select_fields", {}).items())
                 and all(image.get("uri") in {row.get("uri") for row in saved.get("image") or []}
                         for image in data.get("image") or []))
