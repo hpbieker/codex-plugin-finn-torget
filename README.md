@@ -25,8 +25,6 @@ This is an unofficial integration and is not affiliated with FINN.
 
 macOS is the tested platform. Authenticated features currently require macOS because they rely on Safari and CurlSafariServer. Signing in through another browser does not provide authentication to this plugin.
 
-Public listing searches do not require a FINN login or the Safari cookie service. They may work on other operating systems, but Linux and Windows have not been tested. The bundled launcher uses a POSIX shell (`sh`); Windows would also need a compatible shell or an adapted launcher. Full account support on other platforms requires an alternative authentication method.
-
 ## Installation
 
 Clone the repository and register its local plugin marketplace:
