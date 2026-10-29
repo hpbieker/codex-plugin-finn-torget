@@ -1,115 +1,87 @@
-# FINN Torget MCP plugin
+# FINN Torget for Codex
 
-Local Codex plugin exposing typed FINN Torget MCP tools over stdio. Tools call the importable Python core in-process. The former CLI entry point has been removed. The MCP surface includes public product search, owner listings, ad read/update/create/publish, image upload/download/rotation/order/removal, saved-search management, and explicit message sending. Tool names are scoped by the `finn_torget` MCP server and use no redundant FINN prefix. Run through `.mcp.json` with `uv` and Python 3.14.
+Search FINN Torget, manage your listings, and contact sellers from Codex. This plugin runs locally on your Mac and uses your existing FINN login in Safari for account features.
 
-## Conversations
+This is an unofficial integration and is not affiliated with FINN.
 
-`list_conversations` reads grouped inbox threads with an opaque pagination cursor. `get_conversation` reads a message page, and `search_messages` searches a bounded set of recent threads. These tools do not send messages; `send_message` remains a separate explicit action.
+## Features
 
-`delete_listing(listing_id)` deletes one explicitly selected owner listing, verifies removal by ID, and never retries an uncertain deletion automatically.
+- **Find items:** Search public listings by keyword, price, category, location, and whether an item is for sale or rent.
+- **Check sellers:** View a seller's name, profile link, membership year, identity verification, and ratings when FINN provides them.
+- **Manage your ads:** Read, create, edit, publish, and delete your own Torget listings. Search across their titles and descriptions or update several listings at once.
+- **Manage photos:** Upload, download, reorder, rotate, and remove listing photos.
+- **Use messages:** Read conversations, search recent messages, reply, or start a conversation from a listing.
+- **Save searches:** Create saved searches and change their notification settings.
 
-## Update outcomes
+## Requirements
 
-`update_listing`, `move_image`, `remove_image`, and `rotate_image` send at most one final listing write and then read the same ID back, including after a lost write response. They return `listing_id`, `verified`, `outcome` (`verified` or `unconfirmed`), `write_attempted`, `write_request_accepted`, `request_error`, `verification_error`, and `retry_update=false`. A matching readback can verify the requested state even when the write response was lost; `recovered_after_write_error=true` identifies this case. An unconfirmed result is not proof that the write failed. Image results include expected and actual references when known; partial uploads report known uploaded references and never commit an incomplete requested image set. Validation failures before any upload or listing write remain ordinary tool errors.
+- macOS with Codex and plugin support.
+- [uv](https://docs.astral.sh/uv/) installed at `/opt/homebrew/bin/uv`, as used by the bundled launcher.
+- Python available through uv. The current version has been tested with Python 3.13.
+- A FINN account signed in through Safari for private listings, messages, seller profiles, and other account features.
+- **CurlSafariServer** installed and running for Safari authentication. This is a separate dependency and is not included in this repository. It must be able to read Safari cookies; macOS may require Full Disk Access for the server app.
 
+Public listing searches do not require a FINN login. Account features require the local Safari cookie service, even if you are signed in to FINN in another browser.
 
-`get_listings_many(listing_ids=[...])` retrieves owner details but returns only id and title by default. Select `include_fields=["description"]` or `["*"]` for descriptions or all supported details. This is a costly convenience operation, not an upstream bulk API: it performs separate detail retrievals for 1–50 IDs, at most four concurrently, without retries. Results preserve input order and contain a listing or a sanitized error for each ID. FINN IDs are strings; `include_search_metadata=false` is the default to avoid an extra public search per ad.
+## Installation
 
+Clone the repository and register its local plugin marketplace:
 
-## Fulltext search of own listings
+```sh
+git clone https://github.com/hpbieker/codex-plugin-finn-torget.git
+cd codex-plugin-finn-torget
+codex plugin marketplace add .
+codex plugin add codex-plugin-finn-torget@finn-torget-local
+```
 
-Use `search_listings_fulltext(query, scan_limit=100, limit=50)` to find text in
-your own listing titles and descriptions. FINN defaults to `status_facet="ACTIVE"`
-(use `ALL` for all states); Hygglo scans the owner's public listings. This is a
-costly local scan: each selected ad needs a separate detail retrieval, up to four
-concurrently. `scan_limit` caps retrievals at 1–500; `limit` caps returned matches
-at 1–100 without reducing scan cost. No title-only prefilter is applied.
+The launcher creates a Python environment and installs dependencies on first use. If uv is installed elsewhere, adjust the path in `.mcp.json` before installing.
 
-Search syntax: whitespace means AND, uppercase `AND`/`OR` are
-operators, quotes match phrases, leading `-` excludes, and parentheses group.
-Precedence is exclusion, AND, OR. Lowercase and/or are literal words. Matching
-uses case-insensitive substrings; no stemming, regex, or wildcard expansion.
-Terms can match across title and description; phrases stay within one field.
-Inside quotes, backslash escapes quotes/backslashes. Invalid expressions fail
-before network work. Limits: 8192 characters, 512 tokens, 32 nesting levels.
+For authenticated features, sign in to FINN in Safari and start CurlSafariServer. Its default socket is `/private/tmp/curl-safari.sock`; set `CURL_SAFARI_SOCKET_PATH` in the server environment if your installation uses another location.
 
-Example: `(batteri OR batterier) (ekstra OR "kan lånes")`.
+## Usage
 
-All four tools (`list_listings`, `search_listings`, `get_listings_many`,
-`search_listings_fulltext`) return ID and title as their default listing fields.
-Hygglo summaries now use `id` (owner product ID), `title`, and optional `url` in
-place of `productId`, `name`, and `publicUrl`; the public `listingId` remains a
-separate optional field. Fulltext matches keep their existing `listing_id` key.
-Use `include_fields=["description"]` for descriptions in detail retrieval and
-fulltext search, or select other supported fields named in each tool argument.
-Use `include_fields=["*"]` for all supported data already available in that
-operation. This is not the raw upstream object. List/public-search responses do
-not contain full descriptions: requesting unsupported fields is rejected before
-network work, and `*` never hydrates them through extra detail requests.
-Hygglo's old `list_listings(include_description=...)` argument is replaced by
-this contract; use detail/fulltext tools when descriptions are needed.
-Fulltext snippets are now optional via `include_fields=["snippets"]` (also part
-of `*`). Field selection does not affect matching, scan coverage, pagination,
-error reporting, or existing explicit `include_search_metadata` behavior. `*`
-must stand alone; unknown/duplicate fields or an explicitly empty list are
-rejected. Defaults remain minimal when `include_fields` is omitted.
+Ask Codex in natural language. For example:
 
-`total_available`, `selected`, `scanned`, `failed`, and `complete` report fulltext
-scan coverage; `matched`, `returned`, and `has_more_matches` report truncation.
-`complete=false` means the answer is not exhaustive. Errors remain per ad.
+> Find 240 Hz gaming monitors under 2,000 kr that I can pick up in Oslo.
 
-## Public-search paging and locations
+> Show me the seller's ratings for this FINN listing.
 
-`search_listings.total` is the query-wide `metadata.result_size.match_count`,
-not `metadata.num_results` (the latter counts records in one API response).
-`total=null` means the API did not supply a reliable total.
+> Find my ads that mention a battery or charger.
 
-Use `page=1, page_offset=0` initially. The response includes `returned`,
-`has_more`, `next_page`, and `next_page_offset`. Continue with both returned
-values and unchanged search filters. When `limit` cuts off part of an API page,
-the continuation stays on that page with a larger offset; no results are skipped.
-Each call performs only one public search request. `has_more=null` means the
-API did not provide enough paging metadata to establish continuation. FINN may
-cap its accessible result pages even when `total` is larger; reaching the last
-accessible page does not mean every matching ad was accessible.
+> Draft a message asking whether the monitor includes its power cable.
 
-`location` accepts dotted numeric FINN codes, not names: Oslo is `0.20061`.
-Place names such as `Oslo` are rejected locally with an example of valid input,
-before any request. Other syntactically valid but unknown codes may still be
-rejected by FINN; do not guess codes. Choosing location fields in `include_fields`
-does not set a location filter.
+> Send that message to the seller.
 
+> Change the price on my selected listing to 800 kr.
 
-## Sending by listing ID
+Reading information and drafting text do not send messages or change listings. The plugin's instructions require an explicit request before sending a message or changing account data. These actions use the permissions of your signed-in FINN account.
 
-Use `send_listing_message(listing_id, body)` only for an explicitly authorized
-message to that seller. It checks the signed-in contact configuration and Torget
-listing type, finds an existing conversation by the listing-specific lookup,
-and otherwise creates the conversation with its first message in one request.
-No browser automation is needed; existing Safari authentication is reused.
-`send_message(conversation_id, body)` sends in an existing conversation. The
-account ID is resolved internally; the old `login_id` argument was removed.
-Both tools make at most one write and read messages back to verify the exact
-client message ID, body, and outgoing direction. Only `verified=true` confirms
-sending. `outcome=unconfirmed` may mean the message was sent: inspect the returned
-conversation and client message IDs before considering another send. Never retry
-an uncertain write automatically. `write_request_accepted` is separate from
-readback verification. No raw authenticated responses or credentials are returned.
+## Privacy and account access
 
+The MCP server runs locally and imports domain-scoped Safari cookies through the local cookie service. It keeps those cookies in memory rather than writing them to disk. The plugin does not ask for your FINN password.
 
-## Seller profile
+Requests go to FINN using your account where authentication is required. Information returned by a tool is made available to the Codex conversation, including private messages when you ask to read them.
 
-`get_listing_seller(listing_id)` reads the seller's visible FINN profile without
-sending a message or creating a conversation. It reuses Safari login, checks
-that `/messages/api/listing?ids=ad{listing_id}` identifies a Torget listing, and
-reads `/messages/api/contact/configuration/{listing_id}`.
+## Limitations
 
-The result includes `listing_id` and `seller` with `name` (`ownerName`),
-`profile_url` (built from `owner`), `type` (`segment`: PRIVATE -> private; other values -> null), `member_since`
-(`ownerMemberSince`), `identity_verified` (`ownerEidVerified`), `rating_score`
-(`ownerRatingScore`, decimal comma converted to a number), and `rating_count`
-(`ownerRatingCount`). Missing or malformed fields return null, including missing
-verification; false remains false and zero ratings remain zero. Anonymous
-profiles do not expose an owner profile URL. Ratings are FINN's reported values,
-not an independent assessment. Authentication, access, unavailable-listing and
-invalid-response errors are distinct; no raw authenticated responses are returned.
+- Only FINN **Torget** is supported, not FINN Jobs, property, or vehicle listings.
+- The integration uses FINN's web endpoints. Changes to FINN may require a plugin update.
+- Paid promotions, paid packages, and paid publishing upgrades are unsupported. Publishing supports free Standard only.
+- Search results and message searches can be limited or paginated. A partial search is not a complete account history.
+- Seller information can be missing. Ratings and identity verification are reported as supplied by FINN.
+- Changes and messages are checked by reading data back where supported. An unconfirmed outcome can still mean the action succeeded; check the current state before trying again.
+- Deleting a listing is permanent.
+
+## Development
+
+The plugin exposes an MCP server over stdio. Its entry point is `finn_torget_mcp.py`; shared listing helpers are in `core/`. Agent usage instructions are in [`skills/finn-torget/SKILL.md`](skills/finn-torget/SKILL.md).
+
+To install dependencies and run the tests:
+
+```sh
+uv venv .venv
+uv pip install --python .venv/bin/python -r requirements.txt
+.venv/bin/python -m unittest discover -s tests
+```
+
+The automated tests use simulated API responses and do not send messages or change FINN listings.
