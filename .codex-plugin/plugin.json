@@ -1,0 +1,35 @@
+{
+  "name": "codex-plugin-finn-torget",
+  "version": "0.1.10",
+  "description": "Search and manage FINN Torget listings, images, saved searches, and conversations through MCP.",
+  "author": {
+    "name": "Hans Petter Bieker"
+  },
+  "keywords": [
+    "finn",
+    "torget",
+    "marketplace",
+    "mcp"
+  ],
+  "skills": "./skills/",
+  "interface": {
+    "displayName": "FINN Torget",
+    "shortDescription": "Search and manage FINN Torget",
+    "longDescription": "Use FINN Torget product search, listing, image, saved-search and messaging workflows through a local MCP server. Read message threads and search visible message history.",
+    "developerName": "Hans Petter Bieker",
+    "category": "Productivity",
+    "capabilities": [
+      "Read",
+      "Write"
+    ],
+    "brandColor": "#f9c900",
+    "defaultPrompt": [
+      "Search FINN Torget for a product.",
+      "Inspect one of my FINN Torget listings.",
+      "Review my saved FINN searches."
+    ],
+    "composerIcon": "./assets/finn-small.svg",
+    "logo": "./assets/finn.svg"
+  },
+  "mcpServers": "./.mcp.json"
+}

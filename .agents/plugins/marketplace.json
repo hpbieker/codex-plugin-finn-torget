@@ -1,0 +1,1 @@
+{"name":"finn-torget-local","interface":{"displayName":"FINN Torget Local"},"plugins":[{"name":"codex-plugin-finn-torget","source":{"source":"local","path":"."},"policy":{"installation":"AVAILABLE","authentication":"ON_USE"},"category":"Productivity"}]}
