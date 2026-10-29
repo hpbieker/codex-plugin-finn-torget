@@ -4,7 +4,7 @@
       "command": "sh",
       "args": [
         "-c",
-        "(test -x .venv/bin/python || /opt/homebrew/bin/uv venv .venv >&2) && /opt/homebrew/bin/uv pip install --python .venv/bin/python -r ./requirements.txt >&2 && exec .venv/bin/python -B ./finn_torget_mcp.py"
+        "(test -x .venv/bin/python || uv venv .venv >&2) && uv pip install --python .venv/bin/python -r ./requirements.txt >&2 && exec .venv/bin/python -B ./finn_torget_mcp.py"
       ],
       "cwd": "."
     }

@@ -16,7 +16,7 @@ This is an unofficial integration and is not affiliated with FINN.
 ## Requirements
 
 - macOS with Codex and plugin support.
-- [uv](https://docs.astral.sh/uv/) installed at `/opt/homebrew/bin/uv`, as used by the bundled launcher.
+- [uv](https://docs.astral.sh/uv/) available in the `PATH` used by Codex.
 - Python available through uv. The current version has been tested with Python 3.13.
 - A FINN account signed in through Safari for private listings, messages, seller profiles, and other account features.
 - **CurlSafariServer** installed and running for Safari authentication. This is a separate dependency and is not included in this repository. It must be able to read Safari cookies; macOS may require Full Disk Access for the server app.
@@ -34,7 +34,7 @@ codex plugin marketplace add .
 codex plugin add codex-plugin-finn-torget@finn-torget-local
 ```
 
-The launcher creates a Python environment and installs dependencies on first use. If uv is installed elsewhere, adjust the path in `.mcp.json` before installing.
+The launcher finds `uv` through `PATH` and creates a Python environment and installs dependencies on first use. No fixed installation directory is required.
 
 For authenticated features, sign in to FINN in Safari and start CurlSafariServer. Its default socket is `/private/tmp/curl-safari.sock`; set `CURL_SAFARI_SOCKET_PATH` in the server environment if your installation uses another location.
 
