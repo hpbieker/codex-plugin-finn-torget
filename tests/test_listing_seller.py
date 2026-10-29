@@ -20,8 +20,8 @@ class SellerTests(unittest.TestCase):
             return m.get_listing_seller('456'), read
 
     def test_mapping(self):
-        result, read = self.fetch({'ownerName':'Test Seller','owner':789,'segment':'PRIVATE','ownerMemberSince':2009,'ownerEidVerified':True,'ownerRatingScore':'9,8','ownerRatingCount':49})
-        self.assertEqual(result, {'listing_id':'456','seller':{'name':'Test Seller','profile_url':'https://www.finn.no/profile?userId=789','type':'private','member_since':2009,'identity_verified':True,'rating_score':9.8,'rating_count':49}})
+        result, read = self.fetch({'ownerName':'Test Seller','owner':789,'segment':'PRIVATE','ownerMemberSince':2020,'ownerEidVerified':True,'ownerRatingScore':'7,5','ownerRatingCount':12})
+        self.assertEqual(result, {'listing_id':'456','seller':{'name':'Test Seller','profile_url':'https://www.finn.no/profile?userId=789','type':'private','member_since':2020,'identity_verified':True,'rating_score':7.5,'rating_count':12}})
         self.assertEqual([c.args[0] for c in read.call_args_list], [BASE+'/api/listing?ids=ad456', BASE+'/api/contact/configuration/456'])
 
     def test_missing_fields_are_null(self):
@@ -44,11 +44,11 @@ class SellerTests(unittest.TestCase):
 
     def test_malformed_fields(self):
         for score in [True, 'NaN', float('inf'), -1, '11', {}, []]:
-            result,_=self.fetch({'ownerRatingScore':score,'ownerRatingCount':True,'ownerMemberSince':'2009','ownerEidVerified':'false','ownerName':[],'segment':{}})
+            result,_=self.fetch({'ownerRatingScore':score,'ownerRatingCount':True,'ownerMemberSince':'2020','ownerEidVerified':'false','ownerName':[],'segment':{}})
             self.assertTrue(all(v is None for v in result['seller'].values()))
-        for score in ['9.8',9.8]:
+        for score in ['7.5',7.5]:
             result,_=self.fetch({'ownerRatingScore':score})
-            self.assertEqual(result['seller']['rating_score'],9.8)
+            self.assertEqual(result['seller']['rating_score'],7.5)
 
     def test_validation_before_network(self):
         with patch.object(m,'_message_context') as ctx:
