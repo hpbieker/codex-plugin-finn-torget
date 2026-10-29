@@ -22,7 +22,7 @@ from urllib.error import HTTPError, URLError
 from urllib.parse import urlparse, urljoin, urlencode, quote
 from urllib.request import HTTPCookieProcessor, Request, build_opener, urlopen
 
-from pydantic import BaseModel, ConfigDict, Field, model_validator
+from pydantic import BaseModel, ConfigDict, Field, RootModel, StrictBool, model_validator, validate_call
 from mcp.server.fastmcp import FastMCP
 
 ROOT = Path(__file__).resolve().parent
@@ -32,6 +32,23 @@ import finn_torget_core as api  # noqa: E402
 from listing_text_query import compile_query
 from listing_fulltext import search_rows
 from listing_fields import validate_include_fields, project_listing
+from tool_contracts import (
+    Listing, OwnerListing, SearchResults, OwnerListings, CategoryResults, ListingReads,
+    FulltextResults, ListingSeller, Conversations, ConversationMessages,
+    MessageSearch, MessageSend, ListingUpdateResult, ListingUpdates,
+    ListingOptions, DownloadedImage, SavedSearch, SavedSearchChange,
+    ListingPublication, ListingCreation, ListingDeletion,
+)
+
+ListingId = Annotated[str, Field(strict=True, pattern=r"^[1-9][0-9]*$")]
+ConversationId = Annotated[str, Field(strict=True, pattern=r"^[A-Za-z0-9_-]+$")]
+TimestampCursor = Annotated[str, Field(strict=True, pattern=r"^[0-9]+$")]
+OpaqueCursor = Annotated[str, Field(strict=True, pattern=r"^[A-Za-z0-9_-]+$")]
+LocationCode = Annotated[str, Field(strict=True, pattern=r"^[0-9]+(?:\.[0-9]+)+$")]
+NonNegativeInt = Annotated[int, Field(strict=True, ge=0)]
+PositiveInt = Annotated[int, Field(strict=True, ge=1)]
+NonBlankText = Annotated[str, Field(strict=True, pattern=r"\S")]
+
 
 DETAIL_FIELDS = ('price', 'images', 'condition', 'shoe_size', 'state', 'state_raw', 'state_source', 'publication_status', 'publication_status_verified', 'category', 'trade_type', 'for_rent', 'rental_status_verified', 'rental_status_source', 'description', 'search_metadata')
 SUMMARY_FIELDS = ('subtitle', 'state', 'expires', 'url')
@@ -287,20 +304,21 @@ def _download_image(url: str, output_path: str) -> dict:
 
 
 @mcp.tool()
+@validate_call(config=ConfigDict(strict=True, validate_default=True))
 def search_listings(
-    query: Annotated[str, "Search words for FINN Torget."],
-    category_ids: Annotated[list[str] | None, "FINN category IDs."] = None,
-    sub_category_ids: Annotated[list[str] | None, "FINN subcategory IDs."] = None,
-    location: Annotated[list[str] | None, "FINN location codes, not place names. Example: Oslo = 0.20061. Codes use dotted numeric hierarchy, e.g. 0.20061 or 1.20003.20046. Invalid names are rejected locally."] = None,
-    condition: Annotated[list[str] | None, "Condition labels or FINN values."] = None,
-    price_from: int | None = None,
-    price_to: int | None = None,
-    for_rent: Annotated[bool | None, "None/omitted: all ads; true: rent only; false: buy only."] = None,
-    limit: Annotated[int, "Maximum listings returned from this API page (1–100). Follow next_page and next_page_offset to continue without skipping unreturned items."] = 20,
-    include_fields: Annotated[list[str] | None, 'Additional supported fields: price, location, published, url, trade_type, ad_type. Use [*] alone for all fields already available in this operation; never adds detail requests. Defaults: id and title. Explicit id/title selections are also accepted.'] = None,
-    page: Annotated[int, "Upstream result page, starting at 1. Use returned next_page when continuing the same filters."] = 1,
-    page_offset: Annotated[int, "Offset within that API page, starting at 0. Use returned next_page_offset with next_page; avoids skipping results when limit is smaller than a full API page."] = 0,
-) -> dict:
+    query: Annotated[str, Field(description='Search words for FINN Torget.')],
+    category_ids: Annotated[list[str] | None, Field(description='FINN category IDs.')] = None,
+    sub_category_ids: Annotated[list[str] | None, Field(description='FINN subcategory IDs.')] = None,
+    location: Annotated[list[LocationCode] | None, Field(description='FINN location codes, not place names. Example: Oslo = 0.20061. Codes use dotted numeric hierarchy, e.g. 0.20061 or 1.20003.20046. Invalid names are rejected locally.')] = None,
+    condition: Annotated[list[str] | None, Field(description='Condition labels or FINN values.')] = None,
+    price_from: Annotated[NonNegativeInt | None, Field(description='Amount in NOK, zero or greater.')] = None,
+    price_to: Annotated[NonNegativeInt | None, Field(description='Amount in NOK, zero or greater.')] = None,
+    for_rent: Annotated[StrictBool | None, Field(description='None/omitted: all ads; true: rent only; false: buy only.')] = None,
+    limit: Annotated[int, Field(description='Maximum listings returned from this API page (1–100). Follow next_page and next_page_offset to continue without skipping unreturned items.', strict=True, ge=1, le=100)] = 20,
+    include_fields: Annotated[Annotated[list[Literal['id', 'title', '*', 'price', 'location', 'published', 'url', 'trade_type', 'ad_type']], Field(min_length=1)] | None, Field(description='Additional supported fields: price, location, published, url, trade_type, ad_type. Use [*] alone for all fields already available in this operation; never adds detail requests. Defaults: id and title. Explicit id/title selections are also accepted.')] = None,
+    page: Annotated[int, Field(description='Upstream result page, starting at 1. Use returned next_page when continuing the same filters.', strict=True, ge=1)] = 1,
+    page_offset: Annotated[int, Field(description='Offset within that API page, starting at 0. Use returned next_page_offset with next_page; avoids skipping results when limit is smaller than a full API page.', strict=True, ge=0)] = 0,
+) -> RootModel[SearchResults]:
     """Search public FINN Torget ads and return compact listing data.
 
     total is the query-wide match count, not the page size. Continue with both
@@ -317,6 +335,8 @@ def search_listings(
             not isinstance(code, str) or re.fullmatch(r"[0-9]+(?:\.[0-9]+)+", code) is None
             for code in location)):
         raise ValueError("location requires FINN location codes, not place names; for Oslo use location=['0.20061'], not ['Oslo']")
+    if price_from is not None and price_to is not None and price_from > price_to:
+        raise ValueError("price_from cannot exceed price_to")
     extra_fields = validate_include_fields(include_fields, ('price', 'location', 'published', 'url', 'trade_type', 'ad_type'))
     args = argparse.Namespace(query=query, sort=None, price_from=price_from, price_to=price_to,
         published=None, page=page, location=location or [], category=category_ids or [],
@@ -415,32 +435,35 @@ def _catalog_rows():
 
 
 @mcp.tool()
-def list_categories(limit: int = 100, offset: int = 0) -> dict:
+@validate_call(config=ConfigDict(strict=True, validate_default=True))
+def list_categories(limit: Annotated[int, Field(description='Maximum results to return.', strict=True, ge=1, le=250)] = 100, offset: Annotated[int, Field(description='Zero-based result offset.', strict=True, ge=0)] = 0) -> RootModel[CategoryResults]:
     """List FINN category paths. Non-null creation_category_id can be used with create_listing."""
     rows = _catalog_rows()
-    limit, offset = max(1, min(limit, 250)), max(0, offset)
+
     return {"categories": rows[offset:offset + limit], "total": len(rows),
             "next_offset": offset + limit if offset + limit < len(rows) else None}
 
 
 @mcp.tool()
-def search_categories(query: str, limit: int = 20) -> dict:
+@validate_call(config=ConfigDict(strict=True, validate_default=True))
+def search_categories(query: Annotated[NonBlankText, Field(description='Nonempty text; whitespace alone is invalid.')], limit: Annotated[int, Field(description='Maximum results to return.', strict=True, ge=1, le=50)] = 20) -> RootModel[CategoryResults]:
     """Search FINN category names and paths literally; does not suggest categories."""
     needle = query.strip().casefold()
     if not needle:
         raise ValueError("query cannot be empty")
     matches = [row for row in _catalog_rows() if needle in row["path"].casefold()]
-    return {"categories": matches[:max(1, min(limit, 50))], "total": len(matches)}
+    return {"categories": matches[:limit], "total": len(matches)}
 
 
 @mcp.tool()
+@validate_call(config=ConfigDict(strict=True, validate_default=True))
 def list_listings(
-    limit: int = 30,
-    offset: int = 0,
-    status_facet: Annotated[str, "Owner status filter: ACTIVE = active ads (default); DRAFT = started/unfinished ads (Påbegynt); DISPOSED = finished ads, including sold ads; ALL = all statuses."] = "ACTIVE",
+    limit: Annotated[int, Field(description='Maximum results to return.', strict=True, ge=1, le=100)] = 30,
+    offset: Annotated[int, Field(description='Zero-based result offset.', strict=True, ge=0)] = 0,
+    status_facet: Annotated[Literal["ACTIVE", "DRAFT", "DISPOSED", "ALL"], Field(description='Owner status filter: ACTIVE = active ads (default); DRAFT = started/unfinished ads (Påbegynt); DISPOSED = finished ads, including sold ads; ALL = all statuses.')] = "ACTIVE",
     search: str | None = None,
-    include_fields: Annotated[list[str] | None, 'Additional supported fields: subtitle, state, expires, url. Use [*] alone for all fields already available in this operation; never adds detail requests. Defaults: id and title. Explicit id/title selections are also accepted.'] = None,
-) -> dict:
+    include_fields: Annotated[Annotated[list[Literal['id', 'title', '*', 'subtitle', 'state', 'expires', 'url']], Field(min_length=1)] | None, Field(description='Additional supported fields: subtitle, state, expires, url. Use [*] alone for all fields already available in this operation; never adds detail requests. Defaults: id and title. Explicit id/title selections are also accepted.')] = None,
+) -> RootModel[OwnerListings]:
     """List only the user's FINN Torget ads (RECOMMERCE) using the current Safari login.
 
     If own listing IDs are already known, prefer get_listing for one or get_listings_many for several instead of searching/listing again.
@@ -449,8 +472,8 @@ def list_listings(
     facet = status_facet.strip().upper()
     if not facet:
         raise ValueError("status_facet cannot be empty")
-    args = argparse.Namespace(limit=max(1, min(limit, 100)), search=search, facet=facet, type="RECOMMERCE")
-    url = api._my_items_summary_url(args, max(0, offset))
+    args = argparse.Namespace(limit=limit, search=search, facet=facet, type="RECOMMERCE")
+    url = api._my_items_summary_url(args, offset)
     status, _, body = _request(url, authenticated=True, timeout=60)
     data = _parse_json_response(status, body, "FINN owner listings")
     ads = []
@@ -480,12 +503,13 @@ def _torget_owner_lookup(listing_id: str):
 
 
 @mcp.tool()
+@validate_call(config=ConfigDict(strict=True, validate_default=True))
 def get_listing(
-    listing_id: Annotated[str, "FINN Torget ad ID."],
-    include_description: bool = True,
-    include_search_metadata: Annotated[bool, "Read rent/buy metadata from one exact public search. A search miss remains unknown and does not affect owner publication status."] = True,
-) -> dict:
-    """Read owner contents/status and rent/buy metadata for one FINN Torget ad.
+    listing_id: Annotated[ListingId, Field(description='FINN Torget ad ID.')],
+    include_description: StrictBool = True,
+    include_search_metadata: Annotated[StrictBool, Field(description='Read rent/buy metadata from one exact public search. A search miss remains unknown and does not affect owner publication status.')] = True,
+) -> RootModel[OwnerListing]:
+    """Read one of the signed-in user's own FINN Torget listings, including saved contents and publication status. This tool cannot read another seller's listing.
 
     Preferred when one own listing ID is already known; avoid searching for it again.
     Known non-Torget ad types are rejected before retrieving the Torget edit form.
@@ -499,6 +523,8 @@ def get_listing(
         owner_lookup = None
     with _html_state(listing_id) as html_path:
         returned_id, _, data = api._item_put_body_from_create_html(html_path)
+        if str(returned_id) != listing_id:
+            raise RuntimeError("FINN returned a different owner listing ID")
         result = {"id": returned_id, "title": api._item_title(data), "price": api._price_amount(data),
             "images": data.get("image") or [], "condition": data.get("condition"), "shoe_size": data.get("shoe_size")}
         result.update(_listing_state(html_path, str(returned_id), owner_lookup=owner_lookup))
@@ -523,13 +549,14 @@ def get_listing(
 
 
 @mcp.tool()
+@validate_call(config=ConfigDict(strict=True, validate_default=True))
 def search_listings_fulltext(
-    query: Annotated[str, 'Search own titles and descriptions using search syntax: spaces/AND, OR, "phrases", -exclusion, parentheses. Case-insensitive substrings.'],
-    scan_limit: Annotated[int, "Maximum own ads to retrieve (1–500). Costly: separate detail retrieval per ad, up to four concurrently."] = 100,
-    limit: Annotated[int, "Maximum matching ads to return (1–100). Does not reduce scan cost."] = 50,
+    query: Annotated[NonBlankText, Field(description='Search own titles and descriptions using search syntax: spaces/AND, OR, "phrases", -exclusion, parentheses. Case-insensitive substrings.')],
+    scan_limit: Annotated[int, Field(description='Maximum own ads to retrieve (1–500). Costly: separate detail retrieval per ad, up to four concurrently.', strict=True, ge=1, le=500)] = 100,
+    limit: Annotated[int, Field(description='Maximum matching ads to return (1–100). Does not reduce scan cost.', strict=True, ge=1, le=100)] = 50,
     status_facet: Annotated[list[Literal["ACTIVE", "DRAFT", "DISPOSED"]], Field(min_length=1, max_length=3, description="Owner statuses to scan (OR). Default: [ACTIVE]. ACTIVE = active ads; DRAFT = started/unfinished ads; DISPOSED = finished/sold ads. ALL is unsupported here, but remains supported by list_listings.")] = ["ACTIVE"],
-    include_fields: Annotated[list[str] | None, 'Additional fields from already-fetched details: price, images, condition, shoe_size, state, state_raw, state_source, publication_status, publication_status_verified, category, trade_type, for_rent, rental_status_verified, rental_status_source, description, search_metadata, snippets, url. Use [*] alone for all supported details and snippets. Defaults: listing_id and title; no extra API calls. Explicit id/title selections are also accepted.'] = None,
-) -> dict:
+    include_fields: Annotated[Annotated[list[Literal['id', 'title', '*', 'price', 'images', 'condition', 'shoe_size', 'state', 'state_raw', 'state_source', 'publication_status', 'publication_status_verified', 'category', 'trade_type', 'for_rent', 'rental_status_verified', 'rental_status_source', 'description', 'search_metadata', 'snippets', 'url']], Field(min_length=1)] | None, Field(description='Additional fields from already-fetched details: price, images, condition, shoe_size, state, state_raw, state_source, publication_status, publication_status_verified, category, trade_type, for_rent, rental_status_verified, rental_status_source, description, search_metadata, snippets, url. Use [*] alone for all supported details and snippets. Defaults: listing_id and title; no extra API calls. Explicit id/title selections are also accepted.')] = None,
+) -> RootModel[FulltextResults]:
     """Search own listing titles and full descriptions locally; expensive, not an upstream fulltext API.
 
     status_facet is an array: ["ACTIVE"] by default; select DRAFT and/or DISPOSED
@@ -596,11 +623,12 @@ def search_listings_fulltext(
 
 
 @mcp.tool()
+@validate_call(config=ConfigDict(strict=True, validate_default=True))
 def get_listings_many(
-    listing_ids: Annotated[list[str], "1–50 FINN owner ad IDs. One separate detail retrieval per ID."],
-    include_search_metadata: Annotated[bool, "Perform an additional public rent/buy search per ad. Slower; disabled by default."] = False,
-    include_fields: Annotated[list[str] | None, 'Additional supported fields: price, images, condition, shoe_size, state, state_raw, state_source, publication_status, publication_status_verified, category, trade_type, for_rent, rental_status_verified, rental_status_source, description, search_metadata. Use [*] alone for all fields already available in this operation; never adds detail requests. Defaults: id and title. Explicit id/title selections are also accepted.'] = None,
-) -> dict:
+    listing_ids: Annotated[list[ListingId], Field(description='1–50 FINN owner ad IDs. One separate detail retrieval per ID.', min_length=1, max_length=50)],
+    include_search_metadata: Annotated[StrictBool, Field(description='Perform an additional public rent/buy search per ad. Slower; disabled by default.')] = False,
+    include_fields: Annotated[Annotated[list[Literal['id', 'title', '*', 'price', 'images', 'condition', 'shoe_size', 'state', 'state_raw', 'state_source', 'publication_status', 'publication_status_verified', 'category', 'trade_type', 'for_rent', 'rental_status_verified', 'rental_status_source', 'description', 'search_metadata']], Field(min_length=1)] | None, Field(description='Additional supported fields: price, images, condition, shoe_size, state, state_raw, state_source, publication_status, publication_status_verified, category, trade_type, for_rent, rental_status_verified, rental_status_source, description, search_metadata. Use [*] alone for all fields already available in this operation; never adds detail requests. Defaults: id and title. Explicit id/title selections are also accepted.')] = None,
+) -> RootModel[ListingReads]:
     """Read full owner listings, including descriptions, with separate costly detail retrievals.
 
     This is NOT an upstream bulk API: each ID triggers its own retrieval, with
@@ -638,7 +666,8 @@ def get_listings_many(
 
 
 @mcp.tool()
-def get_listing_options(listing_id: str | None = None, category_id: int | None = None) -> dict:
+@validate_call(config=ConfigDict(strict=True, validate_default=True))
+def get_listing_options(listing_id: Annotated[ListingId | None, Field(description='Positive numeric FINN Torget listing ID; use an existing owner ID for account operations.')] = None, category_id: Annotated[PositiveInt | None, Field(description='Positive numeric category ID.')] = None) -> RootModel[ListingOptions]:
     """List supported condition choices before creation, or read live choices for an existing ad/draft."""
     if listing_id is None:
         return {"category": category_id, "source": "supported_condition_catalog",
@@ -675,7 +704,8 @@ def _owner_listing_by_id(listing_id: str) -> tuple[int, dict | None]:
 
 
 @mcp.tool()
-def delete_listing(listing_id: Annotated[str, "ID of the user's FINN listing to permanently delete."]) -> dict:
+@validate_call(config=ConfigDict(strict=True, validate_default=True))
+def delete_listing(listing_id: Annotated[ListingId, Field(description="ID of the user's FINN listing to permanently delete.")]) -> RootModel[ListingDeletion]:
     """Permanently delete one explicitly selected owner listing. Never retries deletion automatically."""
     if not listing_id.isdigit() or int(listing_id) <= 0:
         raise ValueError("listing_id must be a positive numeric FINN ID")
@@ -725,11 +755,12 @@ def delete_listing(listing_id: Annotated[str, "ID of the user's FINN listing to 
 
 
 @mcp.tool()
+@validate_call(config=ConfigDict(strict=True, validate_default=True))
 def download_image(
-    listing_id: Annotated[str, "FINN Torget ad ID."],
-    image_index: Annotated[int, "One-based image position on the ad."],
-    output_path: Annotated[str, "Destination path in an existing local directory. Existing files are never overwritten."],
-) -> dict:
+    listing_id: Annotated[ListingId, Field(description='FINN Torget ad ID.')],
+    image_index: Annotated[int, Field(description='One-based image position on the ad.', strict=True, ge=1)],
+    output_path: Annotated[NonBlankText, Field(description='Destination path in an existing local directory. Existing files are never overwritten.')],
+) -> RootModel[DownloadedImage]:
     """Download one image from the signed-in owner's FINN Torget ad."""
     with _html_state(listing_id) as html_path:
         returned_id, _, data = api._item_put_body_from_create_html(html_path)
@@ -748,16 +779,17 @@ def download_image(
 
 
 @mcp.tool()
+@validate_call(config=ConfigDict(strict=True, validate_default=True))
 def update_listing(
-    listing_id: Annotated[str, "FINN Torget ad ID."],
-    title: str | None = None,
-    description: str | None = None,
-    price: int | None = None,
-    condition: Annotated[str | None, "Optional: Helt ny, Som ny, Pent brukt, Godt brukt, or Må fikses. Do not use the ambiguous Brukt."] = None,
+    listing_id: Annotated[ListingId, Field(description='FINN Torget ad ID.')],
+    title: Annotated[str | None, Field(description="Replacement title; omitted or null leaves the current title unchanged.")] = None,
+    description: Annotated[str | None, Field(description="Replace the entire description; omitted or null leaves it unchanged.")] = None,
+    price: Annotated[NonNegativeInt | None, Field(description='Amount in NOK, zero or greater.')] = None,
+    condition: Annotated[str | None, Field(description='Optional: Helt ny, Som ny, Pent brukt, Godt brukt, or Må fikses. Do not use the ambiguous Brukt.')] = None,
     shoe_size: str | None = None,
-    image_paths: list[str] | None = None,
-    verify_public: bool = False,
-) -> dict:
+    image_paths: list[NonBlankText] | None = None,
+    verify_public: StrictBool = False,
+) -> RootModel[ListingUpdateResult]:
     """Update selected fields on one FINN ad and verify the saved owner state."""
     _validate_condition(condition)
     if all(value is None for value in (title, description, price, condition, shoe_size)) and not image_paths:
@@ -812,7 +844,8 @@ def update_listing(
 
 
 @mcp.tool()
-def saved_searches() -> list[dict]:
+@validate_call(config=ConfigDict(strict=True, validate_default=True))
+def saved_searches() -> list[SavedSearch]:
     """Read saved FINN search names, IDs, and notification settings."""
     status, _, body = _request(api.SAVED_SEARCH_SETTINGS_URL,
         headers={"Accept": "application/json"}, authenticated=True, timeout=60)
@@ -837,10 +870,11 @@ def _saved_search_rows(status, body, context):
 
 
 @mcp.tool()
+@validate_call(config=ConfigDict(strict=True, validate_default=True))
 def update_saved_search(
-    search_id: int,
-    notifications: Annotated[list[str], "Complete desired set: any of web, push, email; an empty list disables notifications."],
-) -> dict:
+    search_id: Annotated[PositiveInt, Field(description='Positive saved-search ID returned by saved_searches.')],
+    notifications: Annotated[list[Literal["web", "push", "email"]], Field(description='Complete desired set: any of web, push, email; an empty list disables notifications.')],
+) -> RootModel[SavedSearchChange]:
     """Replace notifications for one saved FINN search and verify the saved settings."""
     expected = _notification_codes(notifications)
     if search_id <= 0:
@@ -866,16 +900,19 @@ def update_saved_search(
 
 
 @mcp.tool()
+@validate_call(config=ConfigDict(strict=True, validate_default=True))
 def create_saved_search(
     query: str,
     name: str | None = None,
     category_ids: list[str] | None = None,
-    location: list[str] | None = None,
-    price_from: int | None = None,
-    price_to: int | None = None,
-    notifications: Annotated[list[str] | None, "Desired web, push, email notifications; [] disables all, omitted enables all three."] = None,
-) -> dict:
+    location: list[LocationCode] | None = None,
+    price_from: Annotated[NonNegativeInt | None, Field(description='Amount in NOK, zero or greater.')] = None,
+    price_to: Annotated[NonNegativeInt | None, Field(description='Amount in NOK, zero or greater.')] = None,
+    notifications: Annotated[list[Literal["web", "push", "email"]] | None, Field(description='Desired web, push, email notifications; [] disables all, omitted enables all three.')] = None,
+) -> RootModel[SavedSearchChange]:
     """Create a saved FINN search from live search metadata and verify it by ID."""
+    if price_from is not None and price_to is not None and price_from > price_to:
+        raise ValueError("price_from cannot exceed price_to")
     chosen_channels = ["web", "push", "email"] if notifications is None else notifications
     expected_notifications = _notification_codes(chosen_channels)
     args = argparse.Namespace(query=query, name=name, channel=chosen_channels,
@@ -925,17 +962,18 @@ def create_saved_search(
 
 
 @mcp.tool()
+@validate_call(config=ConfigDict(strict=True, validate_default=True))
 def create_listing(
-    title: str,
-    description: str,
-    price: Annotated[int, "Price in NOK."],
-    category_id: Annotated[int, "creation_category_id from search_categories/list_categories; use a subcategory or product category, not a top-level category."],
-    image_paths: Annotated[list[str], "Optional local image paths to attach to the listing."] | None = None,
-    condition: Annotated[str | None, "Optional: Helt ny, Som ny, Pent brukt, Godt brukt, or Må fikses. Do not use the ambiguous Brukt."] = None,
+    title: Annotated[NonBlankText, Field(description='Nonempty text; whitespace alone is invalid.')],
+    description: Annotated[NonBlankText, Field(description='Nonempty text; whitespace alone is invalid.')],
+    price: Annotated[NonNegativeInt, Field(description='Price in NOK.')],
+    category_id: Annotated[PositiveInt, Field(description='creation_category_id from search_categories/list_categories; use a subcategory or product category, not a top-level category.')],
+    image_paths: list[NonBlankText] | None = None,
+    condition: Annotated[str | None, Field(description='Optional: Helt ny, Som ny, Pent brukt, Godt brukt, or Må fikses. Do not use the ambiguous Brukt.')] = None,
     shoe_size: str | None = None,
-    publish_free_standard: Annotated[bool, "Publish using only free Standard after creating and verifying the ad."] = False,
-    draft_id: Annotated[str | None, "Resume this existing draft instead of creating a new ad. Inspect it first with get_listing/get_listing_options."] = None,
-) -> dict:
+    publish_free_standard: Annotated[StrictBool, Field(description='Publish using only free Standard after creating and verifying the ad.')] = False,
+    draft_id: Annotated[ListingId | None, Field(description='Resume this existing draft instead of creating a new ad. Inspect it first with get_listing/get_listing_options.')] = None,
+) -> RootModel[ListingCreation]:
     """Create a FINN Torget listing, verify it, and optionally publish free Standard."""
     _validate_condition(condition)
     if draft_id is not None and not draft_id.isdigit():
@@ -1051,7 +1089,8 @@ def create_listing(
 
 
 @mcp.tool()
-def publish_listing(listing_id: Annotated[str, "FINN Torget ad ID to publish."]) -> dict:
+@validate_call(config=ConfigDict(strict=True, validate_default=True))
+def publish_listing(listing_id: Annotated[ListingId, Field(description='FINN Torget ad ID to publish.')]) -> RootModel[ListingPublication]:
     """Publish an existing draft using only free Standard and verify owner state."""
     before = get_listing(listing_id, include_search_metadata=False)
     if str(before.get("id")) != str(listing_id):
@@ -1138,11 +1177,12 @@ def _save_item_images(listing_id, returned_id, etag, data, *, upload_error=None)
 
 
 @mcp.tool()
+@validate_call(config=ConfigDict(strict=True, validate_default=True))
 def move_image(
-    listing_id: str,
-    image_index: Annotated[int, "Current one-based image position."],
-    to_index: Annotated[int, "New one-based position; use 1 to set the cover image."],
-) -> dict:
+    listing_id: Annotated[ListingId, Field(description='Positive numeric FINN Torget listing ID; use an existing owner ID for account operations.')],
+    image_index: Annotated[int, Field(description='Current one-based image position.', strict=True, ge=1)],
+    to_index: Annotated[int, Field(description='New one-based position; use 1 to set the cover image.', strict=True, ge=1)],
+) -> RootModel[ListingUpdateResult]:
     """Move an existing listing photo and verify the complete image order."""
     with _html_state(listing_id) as html_path:
         returned_id, etag, data = api._item_put_body_from_create_html(html_path)
@@ -1156,10 +1196,11 @@ def move_image(
 
 
 @mcp.tool()
+@validate_call(config=ConfigDict(strict=True, validate_default=True))
 def remove_image(
-    listing_id: str,
-    image_index: Annotated[int, "Current one-based image position to remove."],
-) -> dict:
+    listing_id: Annotated[ListingId, Field(description='Positive numeric FINN Torget listing ID; use an existing owner ID for account operations.')],
+    image_index: Annotated[int, Field(description='Current one-based image position to remove.', strict=True, ge=1)],
+) -> RootModel[ListingUpdateResult]:
     """Remove one listing photo while preserving other fields and verify the remaining order."""
     with _html_state(listing_id) as html_path:
         returned_id, etag, data = api._item_put_body_from_create_html(html_path)
@@ -1172,12 +1213,13 @@ def remove_image(
 
 
 @mcp.tool()
+@validate_call(config=ConfigDict(strict=True, validate_default=True))
 def rotate_image(
-    listing_id: str,
-    image_index: Annotated[int, "Current one-based image position."],
-    source_image: Annotated[str, "Original local image path. The original file is left unchanged."],
-    degrees: Annotated[int, "Clockwise rotation: 90, 180, or 270."],
-) -> dict:
+    listing_id: Annotated[ListingId, Field(description='Positive numeric FINN Torget listing ID; use an existing owner ID for account operations.')],
+    image_index: Annotated[int, Field(description='Current one-based image position.', strict=True, ge=1)],
+    source_image: Annotated[NonBlankText, Field(description='Original local image path. The original file is left unchanged.')],
+    degrees: Annotated[Literal[90, 180, 270], Field(description='Clockwise rotation: 90, 180, or 270.')],
+) -> RootModel[ListingUpdateResult]:
     """Rotate a local original, replace one FINN photo in place, and verify image order."""
     if degrees not in {90, 180, 270}:
         raise ValueError("Degrees must be 90, 180, or 270")
@@ -1206,18 +1248,21 @@ def rotate_image(
 
 
 @mcp.tool()
+@validate_call(config=ConfigDict(strict=True, validate_default=True))
 def list_conversations(
-    limit: Annotated[int, "Maximum conversations to return (1-100)."] = 50,
-    cursor: Annotated[str | None, "Cursor returned by the previous page, if any."] = None,
-    unread_only: bool = False,
-) -> dict:
+    limit: Annotated[int, Field(description='Maximum conversations to return (1-100).', strict=True, ge=1, le=100)] = 50,
+    cursor: Annotated[OpaqueCursor | None, Field(description='Cursor returned by the previous page, if any.')] = None,
+    unread_only: StrictBool = False,
+) -> RootModel[Conversations]:
     """Read FINN message threads in listing groups. This tool never sends messages."""
-    limit = max(1, min(limit, 100))
     state = {"offset": 0, "group": 0, "conversation": 0}
     if cursor:
         try:
             decoded = json.loads(base64.urlsafe_b64decode(cursor + "=" * (-len(cursor) % 4)))
-            state = {key: max(0, int(decoded.get(key, 0))) for key in state}
+            if (not isinstance(decoded, dict) or set(decoded) != set(state)
+                    or any(type(value) is not int or value < 0 for value in decoded.values())):
+                raise ValueError("Cursor must contain nonnegative integer positions")
+            state = decoded
         except (ValueError, TypeError, json.JSONDecodeError) as exc:
             raise ValueError("Invalid conversation cursor") from exc
     base, login_id = _message_context()
@@ -1258,17 +1303,15 @@ def list_conversations(
 
 
 @mcp.tool()
+@validate_call(config=ConfigDict(strict=True, validate_default=True))
 def get_conversation(
-    conversation_id: Annotated[str, "FINN conversation ID."],
-    limit: Annotated[int, "Messages to return (1-200, 50 per API page)."] = 50,
-    before: Annotated[str | None, "Timestamp in milliseconds from the oldest message, to load an older page."] = None,
-) -> dict:
+    conversation_id: Annotated[ConversationId, Field(description='Opaque FINN conversation ID returned by the messaging tools; letters, digits, hyphens and underscores.')],
+    limit: Annotated[int, Field(description='Messages to return (1-200, 50 per API page).', strict=True, ge=1, le=200)] = 50,
+    before: Annotated[TimestampCursor | None, Field(description='Timestamp in milliseconds from the oldest message, to load an older page.')] = None,
+) -> RootModel[ConversationMessages]:
     """Read a FINN conversation page. This tool never sends messages."""
     if not conversation_id.strip():
         raise ValueError("conversation_id cannot be empty")
-    if not all(char.isalnum() or char == "-" for char in conversation_id):
-        raise ValueError("conversation_id contains unsupported characters")
-    limit = max(1, min(limit, 200))
     base, login_id = _message_context()
     messages, seen = [], set()
     cursor = before
@@ -1300,18 +1343,17 @@ def get_conversation(
 
 
 @mcp.tool()
+@validate_call(config=ConfigDict(strict=True, validate_default=True))
 def search_messages(
-    query: Annotated[str, "Text to find in FINN messages, listing titles, names, and previews."],
-    conversation_limit: Annotated[int, "Maximum recent threads to inspect (1-50)."] = 20,
-    messages_per_conversation: Annotated[int, "Recent messages to inspect per thread (1-50)."] = 50,
-    unread_only: bool = False,
-) -> dict:
+    query: Annotated[NonBlankText, Field(description='Text to find in FINN messages, listing titles, names, and previews.')],
+    conversation_limit: Annotated[int, Field(description='Maximum recent threads to inspect (1-50).', strict=True, ge=1, le=50)] = 20,
+    messages_per_conversation: Annotated[int, Field(description='Recent messages to inspect per thread (1-50).', strict=True, ge=1, le=50)] = 50,
+    unread_only: StrictBool = False,
+) -> RootModel[MessageSearch]:
     """Search recent FINN message text within a bounded number of threads; read-only."""
     needle = query.strip().casefold()
     if not needle:
         raise ValueError("query cannot be empty")
-    conversation_limit = max(1, min(conversation_limit, 50))
-    messages_per_conversation = max(1, min(messages_per_conversation, 50))
     listed = list_conversations(limit=conversation_limit, unread_only=unread_only)
     base, login_id = _message_context()
     matches = []
@@ -1401,10 +1443,11 @@ def _send_text(base: str, login_id: str, body: str, *, conversation_id: str | No
 
 
 @mcp.tool()
+@validate_call(config=ConfigDict(strict=True, validate_default=True))
 def send_message(
-    conversation_id: Annotated[str, "FINN conversation ID."],
-    body: Annotated[str, "Message text explicitly authorized by the user."],
-) -> dict:
+    conversation_id: Annotated[ConversationId, Field(description='Opaque FINN conversation ID returned by the messaging tools; letters, digits, hyphens and underscores.')],
+    body: Annotated[NonBlankText, Field(description='Message text explicitly authorized by the user.')],
+) -> RootModel[MessageSend]:
     """Send in an existing FINN conversation and verify readback. Never retries a write."""
     if not isinstance(body, str) or not body.strip() or not conversation_id.strip():
         raise ValueError("Conversation ID and nonempty message body are required")
@@ -1449,9 +1492,10 @@ def _seller_integer(value: object) -> int | None:
 
 
 @mcp.tool()
+@validate_call(config=ConfigDict(strict=True, validate_default=True))
 def get_listing_seller(
-    listing_id: Annotated[str, "FINN Torget listing ID whose seller profile to read."],
-) -> dict:
+    listing_id: Annotated[ListingId, Field(description='FINN Torget listing ID whose seller profile to read.')],
+) -> RootModel[ListingSeller]:
     """Read a Torget seller's visible profile, verification and ratings. Never sends or creates a conversation."""
     if not isinstance(listing_id, str) or not re.fullmatch(r"[1-9][0-9]*", listing_id):
         raise ValueError("A numeric FINN listing ID is required")
@@ -1491,10 +1535,11 @@ def get_listing_seller(
 
 
 @mcp.tool()
+@validate_call(config=ConfigDict(strict=True, validate_default=True))
 def send_listing_message(
-    listing_id: Annotated[str, "FINN Torget listing ID to contact."],
-    body: Annotated[str, "Message text explicitly authorized by the user."],
-) -> dict:
+    listing_id: Annotated[ListingId, Field(description='FINN Torget listing ID to contact.')],
+    body: Annotated[NonBlankText, Field(description='Message text explicitly authorized by the user.')],
+) -> RootModel[MessageSend]:
     """Send to a Torget seller by listing ID, reusing a conversation or starting one. Requires explicit send authorization."""
     if not isinstance(listing_id, str) or not re.fullmatch(r"[1-9][0-9]*", listing_id):
         raise ValueError("A numeric FINN listing ID is required")
@@ -1535,10 +1580,11 @@ class ListingUpdate(BaseModel):
 
 
 @mcp.tool()
+@validate_call(config=ConfigDict(strict=True, validate_default=True))
 def update_listings_many(
     updates: Annotated[list[ListingUpdate], Field(min_length=1, max_length=50)],
-    verify_public: bool = False,
-) -> dict:
+    verify_public: StrictBool = False,
+) -> RootModel[ListingUpdates]:
     """Update 1-50 owned listings using individual patches. Supply listing_id and only
     fields to change; omitted/null fields stay unchanged. description replaces the
     full text. Image uploads use update_listing instead. Validates all input

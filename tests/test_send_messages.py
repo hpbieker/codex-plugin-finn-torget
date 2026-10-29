@@ -110,9 +110,9 @@ class SendingTests(unittest.TestCase):
 
     def test_existing_tool_resolves_current_account(self):
         with patch.object(m, '_message_json') as read, patch.object(m, '_send_text', return_value={}) as send:
-            m.send_message('abc/def', 'Hei')
-            self.assertIn('/users/123/conversations/abc%2Fdef', read.call_args.args[0])
-            send.assert_called_once_with(BASE, '123', 'Hei', conversation_id='abc/def')
+            m.send_message('abc_def-123', 'Hei')
+            self.assertIn('/users/123/conversations/abc_def-123', read.call_args.args[0])
+            send.assert_called_once_with(BASE, '123', 'Hei', conversation_id='abc_def-123')
 
     def test_readback_failure_is_unconfirmed(self):
         with patch.object(m, '_request', return_value=(200, BASE, b'{}')), patch.object(m, '_finn_messages', side_effect=RuntimeError('secret')):

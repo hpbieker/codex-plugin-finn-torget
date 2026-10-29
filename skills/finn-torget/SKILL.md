@@ -7,6 +7,12 @@ description: Search FINN Torget, inspect sellers, manage account listings and sa
 
 Use the typed FINN Torget MCP tools and their structured results. Do not run the plugin's Python modules as command-line programs. This plugin supports Torget listings, not other FINN marketplaces.
 
+## Parameter and result contracts
+
+Use the published input and output schemas. Listing IDs are positive numeric strings. Conversation IDs are opaque strings containing ASCII letters, digits, hyphens, and underscores; pass them unchanged. Numeric limits, prices, status filters, and selected fields are validated before network requests. Invalid limits are rejected rather than silently adjusted. Omitted or null update fields leave existing values unchanged; a supplied description replaces the entire description.
+
+Tools publish structured result schemas. Field-selected listing responses omit unrequested fields rather than filling them with nulls. Preserve the distinction between missing data, false, zero, and an unconfirmed write outcome.
+
 ## Authentication and authorization
 
 Public search is available without login. Account operations use the existing Safari login through a local cookie service. If authentication is required, ask the user to sign in to FINN in Safari. Never expose cookies, authorization headers, write tokens, or raw authenticated requests.

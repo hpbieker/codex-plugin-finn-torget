@@ -57,7 +57,7 @@ class FulltextStatusArrayTests(unittest.TestCase):
     def test_invalid_input_never_fetches_inventory(self):
         for value in [[], ['ALL'], ['ACTIVE', 'ACTIVE'], 'ACTIVE', ['active'], ['UNKNOWN'], [None]]:
             with self.subTest(value=value), patch.object(m, 'list_listings') as listing:
-                with self.assertRaisesRegex(ValueError, 'non-empty array'):
+                with self.assertRaises(ValueError):
                     m.search_listings_fulltext('matching', status_facet=value)
                 listing.assert_not_called()
 
