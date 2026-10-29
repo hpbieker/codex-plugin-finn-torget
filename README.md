@@ -42,17 +42,17 @@ For authenticated features, sign in to FINN in Safari and start CurlSafariServer
 
 Ask Codex in natural language. For example:
 
-> Find 240 Hz gaming monitors under 2,000 kr that I can pick up in Oslo.
+> Search for used furniture in a specified area and price range.
 
-> Show me the seller's ratings for this FINN listing.
+> Show the seller profile and ratings for a listing.
 
-> Find my ads that mention a battery or charger.
+> Search listing titles and descriptions for a keyword.
 
-> Draft a message asking whether the monitor includes its power cable.
+> Draft a question about an item, then send it when approved.
 
-> Send that message to the seller.
+> Update the price or description of a selected listing.
 
-> Change the price on my selected listing to 800 kr.
+> Create a saved search with email notifications.
 
 Reading information and drafting text do not send messages or change listings. The plugin's instructions require an explicit request before sending a message or changing account data. These actions use the permissions of your signed-in FINN account.
 
